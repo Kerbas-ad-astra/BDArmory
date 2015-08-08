@@ -1136,7 +1136,7 @@ namespace BahaTurret
 						try
 						{
 							Part p = Part.FromGO(hit.rigidbody.gameObject);
-                            if(p.vessel!=this.vessel && HitManager.ShouldAllowDamageHooks(p.vessel.id))
+                            if(p.vessel!=this.vessel)
                             {
 								float distance = hit.distance;
 								p.temperature += laserDamage/(float)(Math.PI*Math.Pow(tanAngle*distance,2))*TimeWarp.fixedDeltaTime; //distance modifier: 1/(PI*Pow(Dist*tan(angle),

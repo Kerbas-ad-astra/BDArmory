@@ -71,7 +71,6 @@
     <Compile Include="TargetInfo.cs" />
     <Compile Include="BDATargetManager.cs" />
     <Compile Include="BDModulePilotAI.cs" />
-    <Compile Include="HitManager.cs" />
     <Compile Include="TargetingCamera.cs" />
     <Compile Include="ModuleTargetingCamera.cs" />
     <Compile Include="ModuleTurret.cs" />
