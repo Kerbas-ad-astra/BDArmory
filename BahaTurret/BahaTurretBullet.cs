@@ -3,6 +3,10 @@ using UnityEngine;
 
 namespace BahaTurret
 {
+	/// <summary>
+	/// DEPRECATED
+	/// </summary>
+	[Obsolete("All bullets should be pooled. Use PooledBullet")]
 	public class BahaTurretBullet : MonoBehaviour
 	{
 		public enum BulletTypes{Standard, Explosive}
@@ -54,6 +58,8 @@ namespace BahaTurret
 		float maxDistance;
 
 		//bool isUnderwater = false;
+
+		Rigidbody rb;
 		
 		void Start()
 		{
@@ -72,7 +78,7 @@ namespace BahaTurret
 			startTime = Time.time;
 			prevPosition = gameObject.transform.position;
 			
-			sourceOriginalV = sourceVessel.rigidbody.velocity;
+			sourceOriginalV = sourceVessel.rb_velocity;
 			
 			Light light = gameObject.AddComponent<Light>();
 			light.type = LightType.Point;
@@ -92,8 +98,8 @@ namespace BahaTurret
 			bulletTrail.material.SetColor("_TintColor", currentColor);
 			
 			
-			
-			rigidbody.useGravity = false;
+			rb = GetComponent<Rigidbody> ();
+			rb.useGravity = false;
 			
 		
 			
@@ -103,17 +109,17 @@ namespace BahaTurret
 		{
 			if(bulletDrop && FlightGlobals.RefFrameIsRotating)
 			{
-				rigidbody.velocity += FlightGlobals.getGeeForceAtPosition(transform.position) * TimeWarp.fixedDeltaTime;
+				rb.velocity += FlightGlobals.getGeeForceAtPosition(transform.position) * TimeWarp.fixedDeltaTime;
 			}
 			
 			
 			if(tracerLength == 0)
 			{
-				bulletTrail.SetPosition(0, transform.position+(rigidbody.velocity * TimeWarp.fixedDeltaTime)-(FlightGlobals.ActiveVessel.rigidbody.velocity*TimeWarp.fixedDeltaTime));
+				bulletTrail.SetPosition(0, transform.position+(rb.velocity * TimeWarp.fixedDeltaTime)-(FlightGlobals.ActiveVessel.rb_velocity*TimeWarp.fixedDeltaTime));
 			}
 			else
 			{
-				bulletTrail.SetPosition(0, transform.position + ((rigidbody.velocity-sourceOriginalV).normalized * tracerLength));	
+				bulletTrail.SetPosition(0, transform.position + ((rb.velocity-sourceOriginalV).normalized * tracerLength));	
 			}
 			if(fadeColor)
 			{
@@ -132,12 +138,9 @@ namespace BahaTurret
 			
 			
 			currPosition = gameObject.transform.position;
-
-            HitManager.FireTracerHooks (this.bulletTrail);
 			
 			if((currPosition-startPosition).sqrMagnitude > maxDistance*maxDistance)
 			{
-                HitManager.FireTracerDestroyHooks (this.bulletTrail);
 				GameObject.Destroy(gameObject);
 				return;
 			}
@@ -165,7 +168,7 @@ namespace BahaTurret
 						hitPart = Part.FromGO(hit.rigidbody.gameObject);
 					}catch(NullReferenceException){}
 
-					float hitAngle = Vector3.Angle(rigidbody.velocity, -hit.normal);
+					float hitAngle = Vector3.Angle(rb.velocity, -hit.normal);
 					if(hitPart!=null) //see if it will ricochet of the part
 					{
 						penetrated = !RicochetOnPart(hitPart, hitAngle);
@@ -180,9 +183,9 @@ namespace BahaTurret
 					}
 
 
-                    if(hitPart!=null && !hitPart.partInfo.name.Contains("Strut") && HitManager.ShouldAllowDamageHooks(hitPart.vessel.id))   //when a part is hit, execute damage code (ignores struts to keep those from being abused as armor)(no, because they caused weird bugs :) -BahamutoD)
+					if(hitPart!=null && !hitPart.partInfo.name.Contains("Strut"))   //when a part is hit, execute damage code (ignores struts to keep those from being abused as armor)(no, because they caused weird bugs :) -BahamutoD)
 					{
-						float heatDamage = (rigidbody.mass/hitPart.crashTolerance) * rigidbody.velocity.magnitude * 50 * BDArmorySettings.DMG_MULTIPLIER;   //how much heat damage will be applied based on bullet mass, velocity, and part's impact tolerance
+						float heatDamage = (rb.mass/hitPart.crashTolerance) * rb.velocity.magnitude * 50 * BDArmorySettings.DMG_MULTIPLIER;   //how much heat damage will be applied based on bullet mass, velocity, and part's impact tolerance
 						if(!penetrated)
 						{
 							heatDamage = heatDamage/8;
@@ -202,8 +205,6 @@ namespace BahaTurret
                             if (hitPart.vessel != sourceVessel) hitPart.temperature += heatDamage;  //apply heat damage to the hit part.
                         }
 
-                        HitManager.FireHitHooks (hitPart);
-
 					}
 
                     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +220,7 @@ namespace BahaTurret
 					catch(NullReferenceException){}
 					if(hitBuilding!=null && hitBuilding.IsIntact)
 					{
-						float damageToBuilding = rigidbody.mass * initialSpeed * BDArmorySettings.DMG_MULTIPLIER/120;
+						float damageToBuilding = rb.mass * initialSpeed * BDArmorySettings.DMG_MULTIPLIER/120;
 						if(!penetrated)
 						{
 							damageToBuilding = damageToBuilding/8;
@@ -240,30 +241,29 @@ namespace BahaTurret
 							hasBounced = true;
 							if(BDArmorySettings.BULLET_HITS)
 							{
-								BulletHitFX.CreateBulletHit(hit.point, hit.normal, true, true);
+								BulletHitFX.CreateBulletHit(hit.point, hit.normal, true);
 							}	
 
 							transform.position = hit.point;
-							rigidbody.velocity = Vector3.Reflect(rigidbody.velocity, hit.normal);
-							rigidbody.velocity = hitAngle/150 * rigidbody.velocity * 0.75f;
+							rb.velocity = Vector3.Reflect(rb.velocity, hit.normal);
+							rb.velocity = hitAngle/150 * rb.velocity * 0.75f;
 							
 							Vector3 randomDirection = UnityEngine.Random.rotation * Vector3.one;
 							
-							rigidbody.velocity = Vector3.RotateTowards(rigidbody.velocity, randomDirection, UnityEngine.Random.Range(0f,5f)*Mathf.Deg2Rad, 0);
+							rb.velocity = Vector3.RotateTowards(rb.velocity, randomDirection, UnityEngine.Random.Range(0f,5f)*Mathf.Deg2Rad, 0);
 						}
 						else
 						{
 							if(BDArmorySettings.BULLET_HITS)
 							{
-								BulletHitFX.CreateBulletHit(hit.point, hit.normal, false, true);
+								BulletHitFX.CreateBulletHit(hit.point, hit.normal, false);
 							}
 
 							if(bulletType == BulletTypes.Explosive)
 							{
-                                ExplosionFX.CreateExplosion(hit.point, radius, blastPower, sourceVessel, rigidbody.velocity.normalized, explModelPath, explSoundPath, true);
+								ExplosionFX.CreateExplosion(hit.point, radius, blastPower, sourceVessel, rb.velocity.normalized, explModelPath, explSoundPath);
 							}
 
-                            HitManager.FireTracerDestroyHooks (this.bulletTrail);
 							GameObject.Destroy(gameObject); //destroy bullet on collision
 						}
 					}
@@ -296,8 +296,7 @@ namespace BahaTurret
 			if(airDetonation && (transform.position-startPosition).sqrMagnitude > Mathf.Pow(detonationRange, 2))
 			{
 				//detonate
-                ExplosionFX.CreateExplosion(transform.position, radius, blastPower, sourceVessel, rigidbody.velocity.normalized, explModelPath, explSoundPath, true);
-                HitManager.FireTracerDestroyHooks (this.bulletTrail);
+				ExplosionFX.CreateExplosion(transform.position, radius, blastPower, sourceVessel, rb.velocity.normalized, explModelPath, explSoundPath);
 				GameObject.Destroy(gameObject); //destroy bullet on collision
 			}
 
