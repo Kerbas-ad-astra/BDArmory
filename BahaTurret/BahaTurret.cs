@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace BahaTurret
 {
+	[Obsolete("Use ModuleWeapon and/or ModuleTurret instead")]
 	public class BahaTurret : PartModule
 	{
 		[KSPField(isPersistant = true)]
@@ -643,7 +644,7 @@ namespace BahaTurret
 
 					targetVessel = autoFireTarget;
 					
-					target += targetVessel.rigidbody.velocity * Time.fixedDeltaTime;
+					target += targetVessel.rb_velocity * Time.fixedDeltaTime;
 				}
 				else
 				{
@@ -656,7 +657,7 @@ namespace BahaTurret
 			{
 				if(autoLockCapable && targetVessel != null)
 				{
-					target = targetVessel.CoM + targetVessel.rigidbody.velocity * Time.fixedDeltaTime;
+					target = targetVessel.CoM + targetVessel.rb_velocity * Time.fixedDeltaTime;
 				}
 				else
 				{
@@ -706,18 +707,18 @@ namespace BahaTurret
 				{
 					//Vector3 acceleration = (targetVessel.rigidbody.velocity - targetPrevVel)/Time.fixedDeltaTime;
 					Vector3 acceleration = targetVessel.acceleration;
-					float time2 = CalculateLeadTime(target-transform.position, targetVessel.rigidbody.velocity-rigidbody.velocity, bulletVelocity);
+					float time2 = VectorUtils.CalculateLeadTime(target-transform.position, targetVessel.rb.velocity-rb.velocity, bulletVelocity);
 					if(time2 > 0) time = time2;
-					target += (targetVessel.rigidbody.velocity-rigidbody.velocity) * time; //target vessel relative velocity compensation
+					target += (targetVessel.rb.velocity-rb.velocity) * time; //target vessel relative velocity compensation
 					target += (0.5f * acceleration * time * time); //target acceleration
-					targetPrevVel = targetVessel.rigidbody.velocity;
+					targetPrevVel = targetVessel.rb.velocity;
 					
 				}
 				else if(vessel.altitude < 5000)
 				{
-					float time2 = CalculateLeadTime(target-transform.position, Vector3.zero-rigidbody.velocity, bulletVelocity);
+					float time2 = VectorUtils.CalculateLeadTime(target-transform.position, Vector3.zero-rb.velocity, bulletVelocity);
 					if(time2 > 0) time = time2;
-					target += (-rigidbody.velocity*(time+Time.fixedDeltaTime));  //this vessel velocity compensation against stationary
+					target += (-rb.velocity*(time+Time.fixedDeltaTime));  //this vessel velocity compensation against stationary
 				}
 				if(bulletDrop && FlightGlobals.RefFrameIsRotating) target += (0.5f*gAccel*time*time * FlightGlobals.getUpAxis());  //gravity compensation
 				
@@ -907,7 +908,6 @@ namespace BahaTurret
 		
 		private void Fire()
 		{
-			
 			float timeGap = (60/roundsPerMinute) * TimeWarp.CurrentRate;
 			
 			if(Time.time-timeCheck > timeGap && !isOverheated)
@@ -992,11 +992,11 @@ namespace BahaTurret
 							{
 								foreach(Transform sTf in part.FindModelTransforms("shellEject"))
 								{
-									GameObject ejectedShell = (GameObject) Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/shell/model"), sTf.position + rigidbody.velocity*(Time.fixedDeltaTime), sTf.rotation);
+									GameObject ejectedShell = (GameObject) Instantiate(GameDatabase.Instance.GetModel("BDArmory/Models/shell/model"), sTf.position + rb.velocity*(Time.fixedDeltaTime), sTf.rotation);
 									ejectedShell.SetActive(true);
 									ejectedShell.transform.localScale = Vector3.one * shellScale;
 									ShellCasing shellComponent = ejectedShell.AddComponent<ShellCasing>();
-									shellComponent.initialV = rigidbody.velocity;
+									shellComponent.initialV = rb.velocity;
 									
 								}
 							}
@@ -1029,8 +1029,8 @@ namespace BahaTurret
 							}
 						}
 						firedBullet.transform.position -= firedVelocity * Time.fixedDeltaTime;
-						firedBullet.transform.position += rigidbody.velocity * Time.fixedDeltaTime;
-						firedBullet.rigidbody.AddForce(this.rigidbody.velocity + firedVelocity, ForceMode.VelocityChange);
+						firedBullet.transform.position += rb.velocity * Time.fixedDeltaTime;
+						firedBullet.rigidbody.AddForce(this.rb.velocity + firedVelocity, ForceMode.VelocityChange);
 						if(weaponType != "laser")
 						{
 							BahaTurretBullet bulletScript = firedBullet.AddComponent<BahaTurretBullet>();
@@ -1106,7 +1106,7 @@ namespace BahaTurret
 				{
 					
 					LineRenderer lr = tf.gameObject.GetComponent<LineRenderer>();
-					lr.SetPosition(0, tf.position + (rigidbody.velocity*Time.fixedDeltaTime));
+					lr.SetPosition(0, tf.position + (rb.velocity*Time.fixedDeltaTime));
 
 					Vector3 rayDirection = tf.forward;
 					
@@ -1115,12 +1115,12 @@ namespace BahaTurret
 					Vector3 physStepFix = Vector3.zero;
 					if(targetVessel!=null && targetVessel.loaded)
 					{
-						targetDirection = (targetVessel.CoM+(targetVessel.rigidbody.velocity*Time.fixedDeltaTime)) - tf.position;
-						physStepFix = targetVessel.rigidbody.velocity*Time.fixedDeltaTime;
+						targetDirection = (targetVessel.CoM+(targetVessel.rb.velocity*Time.fixedDeltaTime)) - tf.position;
+						physStepFix = targetVessel.rb.velocity*Time.fixedDeltaTime;
 						if(autoLockCapable && Vector3.Angle(rayDirection, targetDirection) < 3)
 						{
 							rayDirection = targetDirection;
-							targetDirectionLR = (targetVessel.CoM+(2*targetVessel.rigidbody.velocity*Time.fixedDeltaTime)) - tf.position;
+							targetDirectionLR = (targetVessel.CoM+(2*targetVessel.rb.velocity*Time.fixedDeltaTime)) - tf.position;
 						}
 					}
 					
@@ -1193,6 +1193,8 @@ namespace BahaTurret
 					hitPart = null;
 					pointingAtPosition = fireTr.position + (ray.direction * (maxTargetingRange));
 				}
+
+
 				if(targetVessel!=null && targetVessel.loaded) pointingAtPosition = fireTr.transform.position + (ray.direction * targetLeadDistance);
 			}
 			
@@ -1206,10 +1208,10 @@ namespace BahaTurret
 					float simDeltaTime = 0.15f;
 					
 
-					Vector3 simVelocity = rigidbody.velocity+(bulletVelocity*fireTransform.forward);
-					Vector3 simCurrPos = fireTransform.position + (rigidbody.velocity*Time.fixedDeltaTime);
-					Vector3 simPrevPos = fireTransform.position + (rigidbody.velocity*Time.fixedDeltaTime);
-					Vector3 simStartPos = fireTransform.position + (rigidbody.velocity*Time.fixedDeltaTime);
+					Vector3 simVelocity = rb.velocity+(bulletVelocity*fireTransform.forward);
+					Vector3 simCurrPos = fireTransform.position + (rb.velocity*Time.fixedDeltaTime);
+					Vector3 simPrevPos = fireTransform.position + (rb.velocity*Time.fixedDeltaTime);
+					Vector3 simStartPos = fireTransform.position + (rb.velocity*Time.fixedDeltaTime);
 					bool simulating = true;
 					
 					List<Vector3> pointPositions = new List<Vector3>();
@@ -1312,7 +1314,7 @@ namespace BahaTurret
 		}
 		
 		//overheat gauge
-		public static VInfoBox InitHeatGauge(Part p)  //thanks DYJ
+		public VInfoBox InitHeatGauge(Part p)  //thanks DYJ
         {
             VInfoBox v = p.stackIcon.DisplayInfo();
 
@@ -1325,7 +1327,7 @@ namespace BahaTurret
             return v;
         }
 
-		public static VInfoBox InitReloadBar(Part p)
+		public VInfoBox InitReloadBar(Part p)
 		{
 			VInfoBox v = p.stackIcon.DisplayInfo();
 
@@ -1400,28 +1402,7 @@ namespace BahaTurret
 		
 
 		
-		//from howlingmoonsoftware.com
-		//calculates how long it will take for a target to be where it will be when a bullet fired now can reach it.
-		//delta = initial relative position, vr = relative velocity, muzzleV = bullet velocity.
-		public static float CalculateLeadTime(Vector3 delta, Vector3 vr, float muzzleV)
-		{
-			// Quadratic equation coefficients a*t^2 + b*t + c = 0
-  			float a = Vector3.Dot(vr, vr) - muzzleV*muzzleV;
-			float b = 2f*Vector3.Dot(vr, delta);
-			float c = Vector3.Dot(delta, delta);
-			
-			float det = b*b - 4f*a*c;
-			
-			// If the determinant is negative, then there is no solution
-			if(det > 0f)
-			{
-				return 2f*c/(Mathf.Sqrt(det) - b);
-			} 
-			else 
-			{
-				return -1f;
-			}	
-		}
+
 		
 		bool CheckMouseIsOnGui()
 		{
@@ -1430,7 +1411,7 @@ namespace BahaTurret
 		
 		bool WMgrAuthorized()
 		{
-			MissileFire manager = BDArmorySettings.Instance.wpnMgr;
+			MissileFire manager = BDArmorySettings.Instance.ActiveWeaponManager;
 			if(manager != null)
 			{
 				if(manager.hasSingleFired) return false;

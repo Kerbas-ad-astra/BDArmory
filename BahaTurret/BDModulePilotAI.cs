@@ -38,7 +38,7 @@ namespace BahaTurret
 
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Steer Factor"),
 		 UI_FloatRange(minValue = 0.1f, maxValue = 20f, stepIncrement = .1f, scene = UI_Scene.All)]
-		public float steerMult = 12;
+		public float steerMult = 14;
 		//make a combat steer mult and idle steer mult
 		
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Steer Limiter"),
@@ -52,6 +52,10 @@ namespace BahaTurret
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Max Speed"),
 		 UI_FloatRange(minValue = 125f, maxValue = 800f, stepIncrement = 1.0f, scene = UI_Scene.All)]
 		public float maxSpeed = 325;
+
+		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "TakeOff Speed"),
+			UI_FloatRange(minValue = 20f, maxValue = 200f, stepIncrement = 1.0f, scene = UI_Scene.All)]
+		public float takeOffSpeed = 70;
 
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "Standby Mode"),
 		 UI_Toggle(enabledText = "On", disabledText = "Off")]
@@ -146,7 +150,7 @@ namespace BahaTurret
 
 		void Update()
 		{
-			if(BDArmorySettings.DRAW_DEBUG_LINES)
+			if(BDArmorySettings.DRAW_DEBUG_LINES && pilotEnabled)
 			{
 				if(lr)
 				{
@@ -311,10 +315,10 @@ namespace BahaTurret
             	}
 				else
 				{
-					BahaTurret bt = wm.currentTurret;
-					if(bt!=null)
+					ModuleWeapon weapon = wm.currentGun;
+					if(weapon!=null)
 					{
-						target -= bt.GetLeadOffset();
+						target -= 1.25f*weapon.GetLeadOffset();
 					}
 				}
 
@@ -472,7 +476,15 @@ namespace BahaTurret
 			threatLevel = 1;
 			debugString += "\nTaking off/Gaining altitude";
 
+			if(vessel.Landed && vessel.srfSpeed < takeOffSpeed)
+			{
+				return;
+			}
+
+
 			float radarAlt = MissileGuidance.GetRadarAltitude(vessel);
+
+
 
 			if(radarAlt > 70)
 			{
@@ -523,7 +535,7 @@ namespace BahaTurret
 			}
 		}
 
-		public bool GetLaunchAuthorizion(Vessel targetV, MissileFire mf)
+		public bool GetLaunchAuthorization(Vessel targetV, MissileFire mf)
 		{
 			bool launchAuthorized = false;
 			Vector3 target = targetV.transform.position;
@@ -533,7 +545,7 @@ namespace BahaTurret
 				target = MissileGuidance.GetAirToAirFireSolution(missile, targetV);
 			}
 
-			if(Vector3.Angle(vessel.ReferenceTransform.up, target-vessel.ReferenceTransform.position) < 35)
+			if(Vector3.Angle(vessel.ReferenceTransform.up, target-vessel.ReferenceTransform.position) < 20)
 			   //|| (targetV.Landed && Vector3.Angle(vessel.ReferenceTransform.up, FlightPosition(target, (float)vessel.altitude)-vessel.ReferenceTransform.position) < 15))
 			{
 				launchAuthorized = true;
