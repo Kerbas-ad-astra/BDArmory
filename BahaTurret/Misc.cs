@@ -54,20 +54,37 @@ namespace BahaTurret
 		
 		public static bool CheckMouseIsOnGui()
 		{
+			
+			if(!BDArmorySettings.GAME_UI_ENABLED) return false;
+
+			if(!BDInputSettingsFields.WEAP_FIRE_KEY.inputString.Contains("mouse")) return false;
+
+
 			Vector3 inverseMousePos = new Vector3(Input.mousePosition.x, Screen.height-Input.mousePosition.y, 0);
 			Rect topGui = new Rect(0,0, Screen.width, 65);
+
+
+			if(topGui.Contains(inverseMousePos)) return true;
+			if(BDArmorySettings.toolbarGuiEnabled && BDArmorySettings.Instance.toolbarWindowRect.Contains(inverseMousePos)) return true;
+			if(ModuleTargetingCamera.windowIsOpen && ModuleTargetingCamera.camWindowRect.Contains(inverseMousePos)) return true;
+			if(BDArmorySettings.Instance.ActiveWeaponManager)
+			{
+				MissileFire wm = BDArmorySettings.Instance.ActiveWeaponManager;
+				if(wm.radar && wm.radar.radarEnabled)
+				{
+					if(ModuleRadar.radarWindowRect.Contains(inverseMousePos)) return true;
+					if(wm.radar.linkWindowOpen && wm.radar.linkWindowRect.Contains(inverseMousePos)) return true;
+				}
+				if(wm.rwr && wm.rwr.rwrEnabled && RadarWarningReceiver.windowRect.Contains(inverseMousePos)) return true;
+			}
 			
-			return 
-			(
-				BDArmorySettings.GAME_UI_ENABLED && 
-				BDArmorySettings.FIRE_KEY.Contains("mouse") &&
-				(
-					(BDArmorySettings.toolbarGuiEnabled && BDArmorySettings.Instance.toolbarWindowRect.Contains(inverseMousePos)) 
-					|| topGui.Contains(inverseMousePos)
-					|| (ModuleTargetingCamera.windowIsOpen && ModuleTargetingCamera.camWindowRect.Contains(inverseMousePos))
-					|| (BDArmorySettings.Instance.ActiveWeaponManager!=null && BDArmorySettings.Instance.ActiveWeaponManager.radar!=null && BDArmorySettings.Instance.ActiveWeaponManager.radar.radarEnabled && ModuleRadar.radarWindowRect.Contains(inverseMousePos))
-				)
-			);	
+			return false;
+		}
+
+		public static bool MouseIsInRect(Rect rect)
+		{
+			Vector3 inverseMousePos = new Vector3(Input.mousePosition.x, Screen.height-Input.mousePosition.y, 0);
+			return rect.Contains(inverseMousePos);
 		}
 		
 		//Thanks FlowerChild
@@ -129,7 +146,7 @@ namespace BahaTurret
 			RaycastHit rayHit;
 			if(Physics.Raycast(ray, out rayHit, dist, 557057))
 			{
-				if((rayHit.point-target).sqrMagnitude < Mathf.Pow(threshold, 2))
+				if(rayHit.distance < threshold)
 				{
 					return true;
 				}

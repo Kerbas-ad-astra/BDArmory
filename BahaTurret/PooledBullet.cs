@@ -71,8 +71,7 @@ namespace BahaTurret
 			startPosition = transform.position;
 			collisionEnabled = false;
 
-			float maxLimit = Mathf.Clamp(BDArmorySettings.MAX_BULLET_RANGE, 0, 8000);
-			maxDistance = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE, 2500, maxLimit);
+			maxDistance = Mathf.Clamp(BDArmorySettings.PHYSICS_RANGE, 2500, BDArmorySettings.MAX_BULLET_RANGE);
 			if(!wasInitiated)
 			{
 				projectileColor.a = projectileColor.a/2;
@@ -142,11 +141,27 @@ namespace BahaTurret
 			collisionEnabled = true;
 		}
 
-
+		void OnWillRenderObject()
+		{
+			if(!gameObject.activeInHierarchy)
+			{
+				return;
+			}
+			Camera currentCam = Camera.current;
+			if(currentCam == FlightCamera.fetch.cameras[0] || currentCam == FlightCamera.fetch.cameras[1])
+			{
+				UpdateWidth(currentCam, 1);
+			}
+			else
+			{
+				UpdateWidth(currentCam, 4);
+			}
+		}
 			
 		
 		void FixedUpdate()
 		{
+			float distanceFromStart = Vector3.Distance(transform.position, startPosition);
 			if(!gameObject.activeInHierarchy)
 			{
 				return;
@@ -180,7 +195,7 @@ namespace BahaTurret
 			
 			currPosition = gameObject.transform.position;
 			
-			if((currPosition-startPosition).sqrMagnitude > maxDistance*maxDistance)
+			if(distanceFromStart > maxDistance)
 			{
 				//GameObject.Destroy(gameObject);
 				KillBullet();
@@ -336,7 +351,7 @@ namespace BahaTurret
 				*/
 			}
 			
-			if(bulletType == PooledBulletTypes.Explosive && airDetonation && (transform.position-startPosition).sqrMagnitude > Mathf.Pow(detonationRange, 2))
+			if(bulletType == PooledBulletTypes.Explosive && airDetonation && distanceFromStart > detonationRange)
 			{
 				//detonate
 				ExplosionFX.CreateExplosion(transform.position, radius, blastPower, sourceVessel, currentVelocity.normalized, explModelPath, explSoundPath);

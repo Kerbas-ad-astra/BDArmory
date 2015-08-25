@@ -39,13 +39,28 @@ namespace BahaTurret
 		public Vector3[] pingWorldPositions;
 		List<TargetSignatureData> launchWarnings;
 
-		Transform referenceTransform;
+		Transform rt;
+		Transform referenceTransform
+		{
+			get
+			{
+				if(!rt)
+				{
+					rt = new GameObject().transform;
+					rt.parent = part.transform;
+					rt.localPosition = Vector3.zero;
+				}
+				return rt;
+			}
+
+		}
 		Rect displayRect = new Rect(0, 0, 256, 256);
 
 		GUIStyle rwrIconLabelStyle;
 
 		AudioSource audioSource;
-		Rect windowRect;
+		public static Rect windowRect;
+		public static bool windowRectInitialized = false;
 
 	
 
@@ -58,10 +73,6 @@ namespace BahaTurret
 				pingWorldPositions = new Vector3[dataCount];
 				TargetSignatureData.ResetTSDArray(ref pingsData);
 				launchWarnings = new List<TargetSignatureData>();
-
-				referenceTransform = new GameObject().transform;
-				referenceTransform.parent = transform;
-				referenceTransform.localPosition = Vector3.zero;
 
 				rwrIconLabelStyle = new GUIStyle();
 				rwrIconLabelStyle.alignment = TextAnchor.MiddleCenter;
@@ -82,7 +93,11 @@ namespace BahaTurret
 				BDArmorySettings.OnVolumeChange += UpdateVolume;
 
 				float size = displayRect.height + 20;
-				windowRect = new Rect(20, Screen.height-size-20, displayRect.width + 20, size);
+				if(!windowRectInitialized)
+				{
+					windowRect = new Rect(20, Screen.height - size - 20, displayRect.width + 20, size);
+					windowRectInitialized = true;
+				}
 
 				foreach(var mf in vessel.FindPartModulesImplementing<MissileFire>())
 				{
@@ -140,8 +155,10 @@ namespace BahaTurret
 
 		void ReceiveLaunchWarning(Vector3 source, Vector3 direction)
 		{
-			float sqrDist = (transform.position - source).sqrMagnitude;
-			if(sqrDist < Mathf.Pow(5000, 2) && sqrDist > Mathf.Pow(100,2) && Vector3.Angle(direction, transform.position - source) < 15)
+			if(!referenceTransform || !part) return;
+
+			float sqrDist = (part.transform.position - source).sqrMagnitude;
+			if(sqrDist < Mathf.Pow(5000, 2) && sqrDist > Mathf.Pow(100,2) && Vector3.Angle(direction, part.transform.position - source) < 15)
 			{
 				StartCoroutine(LaunchWarningRoutine(new TargetSignatureData(Vector3.zero, RadarUtils.WorldToRadar(source, referenceTransform, displayRect, rwrDisplayRange), Vector3.zero, true, (float)RWRThreatTypes.MissileLaunch)));
 				PlayWarningSound(RWRThreatTypes.MissileLaunch);
@@ -231,7 +248,8 @@ namespace BahaTurret
 		{
 			if(HighLogic.LoadedSceneIsFlight && FlightGlobals.ready && BDArmorySettings.GAME_UI_ENABLED && vessel.isActiveVessel && rwrEnabled)
 			{
-				windowRect = GUI.Window(94353, windowRect, RWRWindow, GUIContent.none); 
+				windowRect = GUI.Window(94353, windowRect, RWRWindow, GUIContent.none, HighLogic.Skin.window); 
+				BDGUIUtils.UseMouseEventInRect(windowRect);
 			}
 		}
 
