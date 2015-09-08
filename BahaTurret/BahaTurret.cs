@@ -1142,8 +1142,7 @@ namespace BahaTurret
 								p.temperature += laserDamage/(float)(Math.PI*Math.Pow(tanAngle*distance,2))*TimeWarp.fixedDeltaTime; //distance modifier: 1/(PI*Pow(Dist*tan(angle),
 
 								if(BDArmorySettings.INSTAKILL) p.temperature += p.maxTemp;
-								
-                                HitManager.FireHitHooks(p);
+							
 							}
 						}
 						catch(NullReferenceException){}
