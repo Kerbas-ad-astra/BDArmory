@@ -27,6 +27,7 @@ namespace BahaTurret
 
 		//RADAR
 		public static BDInputInfo RADAR_LOCK = new BDInputInfo("Lock/Unlock");
+		public static BDInputInfo RADAR_CYCLE_LOCK = new BDInputInfo("Cycle Lock");
 		public static BDInputInfo RADAR_SLEW_RIGHT = new BDInputInfo("Slew Right");
 		public static BDInputInfo RADAR_SLEW_LEFT = new BDInputInfo("Slew Left");
 		public static BDInputInfo RADAR_SLEW_UP = new BDInputInfo("Slew Up");
@@ -37,8 +38,9 @@ namespace BahaTurret
 		public static BDInputInfo RADAR_RANGE_DN = new BDInputInfo("Range -");
 
 
-		public static void SaveSettings(ConfigNode fileNode)
+		public static void SaveSettings()
 		{
+			ConfigNode fileNode = ConfigNode.Load(BDArmorySettings.settingsConfigURL);
 			if(!fileNode.HasNode("BDAInputSettings"))
 			{
 				fileNode.AddNode("BDAInputSettings");
@@ -53,10 +55,13 @@ namespace BahaTurret
 				string valueString = ((BDInputInfo)fields[i].GetValue(null)).inputString;
 				cfg.SetValue(fieldName, valueString, true);
 			}
+
+			fileNode.Save(BDArmorySettings.settingsConfigURL);
 		}
 
-		public static void LoadSettings(ConfigNode fileNode)
+		public static void LoadSettings()
 		{
+			ConfigNode fileNode = ConfigNode.Load(BDArmorySettings.settingsConfigURL);
 			if(!fileNode.HasNode("BDAInputSettings"))
 			{
 				fileNode.AddNode("BDAInputSettings");
@@ -75,6 +80,8 @@ namespace BahaTurret
 					fields[i].SetValue(null, loaded);
 				}
 			}
+
+			fileNode.Save(BDArmorySettings.settingsConfigURL);
 		}
 	}
 }
