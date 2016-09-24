@@ -44,7 +44,7 @@ namespace BahaTurret
 		{
 			get
 			{
-				return vessel.transform.position;
+				return vessel.vesselTransform.position;
 			}
 		}
 
@@ -75,19 +75,11 @@ namespace BahaTurret
 					return false;
 				}
 
-				foreach(var wm in Vessel.FindPartModulesImplementing<MissileFire>())
-				{
-					if(wm.vessel.IsControllable)
-					{
-						return true;
-					}
-					else
-					{
-						return false;
-					}
-				}
-
 				if(isMissile && missileModule && !missileModule.hasMissed)
+				{
+					return true;
+				}
+				else if(weaponManager && weaponManager.vessel.IsControllable)
 				{
 					return true;
 				}
@@ -184,11 +176,12 @@ namespace BahaTurret
 			BDArmorySettings.OnPeaceEnabled -= OnPeaceEnabled;
 		}
 
+		public float detectedTime;
 		Coroutine lifeRoutine;
 		IEnumerator LifetimeRoutine()
 		{
-			float startTime = Time.time;
-			while(Time.time - startTime < 30 && enabled)
+			detectedTime = Time.time;
+			while(Time.time - detectedTime < 60 && enabled)
 			{
 				yield return null;
 			}

@@ -71,15 +71,53 @@ namespace BahaTurret
 			if(BDArmorySettings.Instance.ActiveWeaponManager)
 			{
 				MissileFire wm = BDArmorySettings.Instance.ActiveWeaponManager;
-				if(wm.radar && wm.radar.radarEnabled)
+
+				if(wm.vesselRadarData && wm.vesselRadarData.guiEnabled)
 				{
-					if(ModuleRadar.radarWindowRect.Contains(inverseMousePos)) return true;
-					if(wm.radar.linkWindowOpen && wm.radar.linkWindowRect.Contains(inverseMousePos)) return true;
+					if(VesselRadarData.radarWindowRect.Contains(inverseMousePos)) return true;
+					if(wm.vesselRadarData.linkWindowOpen && wm.vesselRadarData.linkWindowRect.Contains(inverseMousePos)) return true;
 				}
 				if(wm.rwr && wm.rwr.rwrEnabled && RadarWarningReceiver.windowRect.Contains(inverseMousePos)) return true;
+				if(wm.wingCommander && wm.wingCommander.showGUI)
+				{
+					if(wm.wingCommander.guiWindowRect.Contains(inverseMousePos)) return true;
+					if(wm.wingCommander.showAGWindow && wm.wingCommander.agWindowRect.Contains(inverseMousePos)) return true;
+				}
+
+				if(extraGUIRects != null)
+				{
+					for(int i = 0; i < extraGUIRects.Count; i++)
+					{
+						if(extraGUIRects[i].Contains(inverseMousePos)) return true;
+					}
+				}
 			}
 			
 			return false;
+		}
+
+		public static List<Rect> extraGUIRects;
+
+		public static int RegisterGUIRect(Rect rect)
+		{
+			if(extraGUIRects == null)
+			{
+				extraGUIRects = new List<Rect>();
+			}
+
+			int index = extraGUIRects.Count;
+			extraGUIRects.Add(rect);
+			return index;
+		}
+
+		public static void UpdateGUIRect(Rect rect, int index)
+		{
+			if(extraGUIRects == null)
+			{
+				Debug.LogWarning("Trying to update a GUI rect for mouse position check, but Rect list is null.");
+			}
+
+			extraGUIRects[index] = rect;
 		}
 
 		public static bool MouseIsInRect(Rect rect)
@@ -160,6 +198,27 @@ namespace BahaTurret
 			return false;
 		}
 
+		public static bool CheckSightLineExactDistance(Vector3 origin, Vector3 target, float maxDistance, float threshold, float startDistance)
+		{
+			float dist = maxDistance;
+			Ray ray = new Ray(origin, target-origin);
+			ray.origin += ray.direction*startDistance;
+			RaycastHit rayHit;
+			if(Physics.Raycast(ray, out rayHit, dist, 557057))
+			{
+				if(Vector3.Distance(target, rayHit.point) < threshold)
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
 
 
 		public static float[] ParseToFloatArray(string floatString)
@@ -231,24 +290,23 @@ namespace BahaTurret
 		}
 
 
-		public static void RemoveFARModule(Part p)
+
+		public static KeyBinding AGEnumToKeybinding(KSPActionGroup group)
 		{
-			Component farComponent = p.gameObject.GetComponent("FARAeroPartModule");
-			if(farComponent != null)
+			string groupName = group.ToString();
+			if(groupName.Contains("Custom"))
 			{
-				if(BDArmorySettings.DRAW_DEBUG_LABELS)
-				{
-					Debug.Log("FAR component found on missile. Removing it.");
-				}
-				Component.Destroy(farComponent);
+				groupName = groupName.Substring(6);
+				int customNumber = int.Parse(groupName);
+				groupName = "CustomActionGroup" + customNumber;
 			}
 			else
 			{
-				if(BDArmorySettings.DRAW_DEBUG_LABELS)
-				{
-					Debug.Log("No FAR component found.");
-				}
+				return null;
 			}
+
+			FieldInfo field = typeof(GameSettings).GetField(groupName);
+			return (KeyBinding)field.GetValue(null);
 		}
 	
 	}

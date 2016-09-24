@@ -19,6 +19,7 @@ namespace BahaTurret
 
 		public MissileFire weaponManager;
 
+		[KSPField(isPersistant = true)]
 		public bool rwrEnabled = false;
 
 		public static Texture2D rwrDiamondTexture = GameDatabase.Instance.GetTexture(BDArmorySettings.textureDir + "rwrDiamond", false);
@@ -87,6 +88,7 @@ namespace BahaTurret
 				audioSource = gameObject.AddComponent<AudioSource>();
 				audioSource.minDistance = 500;
 				audioSource.maxDistance = 1000;
+				audioSource.spatialBlend = 1;
 				audioSource.dopplerLevel = 0;
 				audioSource.loop = false;
 
@@ -107,6 +109,11 @@ namespace BahaTurret
 					{
 						weaponManager = mf;
 					}
+				}
+
+				if(rwrEnabled)
+				{
+					EnableRWR();
 				}
 			}
 		}
@@ -166,7 +173,8 @@ namespace BahaTurret
 
 				if(weaponManager && weaponManager.guardMode)
 				{
-					weaponManager.FireAllCountermeasures(2);
+					weaponManager.FireAllCountermeasures(UnityEngine.Random.Range(2,4));
+					weaponManager.incomingThreatPosition = source;
 				}
 			}
 		}
@@ -264,7 +272,7 @@ namespace BahaTurret
 			GUI.BeginGroup(new Rect(10, 30, displayRect.width, displayRect.height));
 			GUI.DragWindow(displayRect);
 
-			GUI.DrawTexture(displayRect, ModuleRadar.omniBgTexture, ScaleMode.StretchToFill, false);
+			GUI.DrawTexture(displayRect, VesselRadarData.omniBgTexture, ScaleMode.StretchToFill, false);
 			float pingSize = 32;
 
 			for(int i = 0; i < dataCount; i++)

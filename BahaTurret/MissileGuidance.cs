@@ -9,8 +9,8 @@ namespace BahaTurret
 		
 		public static Vector3 GetAirToGroundTarget(Vector3 targetPosition, Vessel missileVessel, float descentRatio)
 		{
-			Vector3 upDirection = -FlightGlobals.getGeeForceAtPosition(targetPosition).normalized;
-			Vector3 surfacePos = missileVessel.transform.position - ((float)missileVessel.altitude*upDirection);
+			Vector3 upDirection = missileVessel.upAxis;//-FlightGlobals.getGeeForceAtPosition(targetPosition).normalized;
+			Vector3 surfacePos = missileVessel.transform.position + Vector3.Project(targetPosition-missileVessel.transform.position, upDirection); //((float)missileVessel.altitude*upDirection);
 			Vector3 targetSurfacePos;
 
 			targetSurfacePos = targetPosition;
@@ -62,12 +62,64 @@ namespace BahaTurret
 			}
 		}
 
-		public static Vector3 GetAirToAirTarget(Vector3 targetPosition, Vector3 targetVelocity, Vector3 targetAcceleration, Vessel missileVessel,  out float timeToImpact)
+		public static bool GetBallisticGuidanceTarget(Vector3 targetPosition, Vector3 missilePosition, float missileSpeed, bool direct, out Vector3 finalTarget)
+		{
+			Vector3 up = VectorUtils.GetUpDirection(missilePosition);
+			Vector3 forward = Vector3.ProjectOnPlane(targetPosition - missilePosition, up);
+			float speed = missileSpeed;
+			float sqrSpeed = speed * speed;
+			float sqrSpeedSqr = sqrSpeed * sqrSpeed;
+			float g = (float)FlightGlobals.getGeeForceAtPosition(missilePosition).magnitude;
+			float height = FlightGlobals.getAltitudeAtPos(targetPosition)-FlightGlobals.getAltitudeAtPos(missilePosition);
+			float sqrRange = forward.sqrMagnitude;
+			float range = Mathf.Sqrt(sqrRange);
+
+			float plusOrMinus = direct ? -1 : 1;
+
+			float top = sqrSpeed + (plusOrMinus * Mathf.Sqrt(sqrSpeedSqr - (g * ((g * sqrRange + (2 * height * sqrSpeed))))));
+			float bottom = g * range;
+			float theta = Mathf.Atan(top / bottom);
+
+			if(!float.IsNaN(theta))
+			{
+				Vector3 finalVector = Quaternion.AngleAxis(theta * Mathf.Rad2Deg, Vector3.Cross(forward, up)) * forward;
+				finalTarget = missilePosition + (100 * finalVector);
+				return true;
+			}
+			else
+			{
+				finalTarget = Vector3.zero;
+				return false;
+			}
+		}
+
+		public static Vector3 GetBeamRideTarget(Ray beam, Vector3 currentPosition, Vector3 currentVelocity, float correctionFactor, float correctionDamping, Ray previousBeam)
+		{
+			float onBeamDistance = Vector3.Project(currentPosition - beam.origin, beam.direction).magnitude;
+			//Vector3 onBeamPos = beam.origin+Vector3.Project(currentPosition-beam.origin, beam.direction);//beam.GetPoint(Vector3.Distance(Vector3.Project(currentPosition-beam.origin, beam.direction), Vector3.zero));
+			Vector3 onBeamPos = beam.GetPoint(onBeamDistance);
+			Vector3 previousBeamPos = previousBeam.GetPoint(onBeamDistance);
+			Vector3 beamVel = (onBeamPos - previousBeamPos) / Time.fixedDeltaTime;
+			Vector3 target = onBeamPos + (500f * beam.direction);
+			Vector3 offset = onBeamPos - currentPosition;
+			offset += beamVel*0.5f;
+			target += correctionFactor * offset;
+
+			Vector3 velDamp = correctionDamping * Vector3.ProjectOnPlane(currentVelocity-beamVel, beam.direction);
+			target -= velDamp;
+
+
+			return target;
+		}
+
+		public static Vector3 GetAirToAirTarget(Vector3 targetPosition, Vector3 targetVelocity, Vector3 targetAcceleration, Vessel missileVessel,  out float timeToImpact, float minSpeed = 200)
 		{
 			float leadTime = 0;
 			float targetDistance = Vector3.Distance(targetPosition, missileVessel.transform.position);
 
-			leadTime = (float)(1/((targetVelocity-missileVessel.srf_velocity).magnitude/targetDistance));
+			Vector3 currVel = Mathf.Max((float)missileVessel.srfSpeed, minSpeed) * missileVessel.srf_velocity.normalized;
+
+			leadTime = (float)(1/((targetVelocity-currVel).magnitude/targetDistance));
 			timeToImpact = leadTime;
 			leadTime = Mathf.Clamp(leadTime, 0f, 8f);
 			Vector3 mTargetPosition = targetPosition + (targetVelocity*leadTime);
@@ -174,18 +226,23 @@ namespace BahaTurret
 		public static Vector3 GetTerminalManeuveringTarget(Vector3 targetPosition, Vessel missileVessel, float radarAlt)
 		{
 			Vector3 upDirection = -FlightGlobals.getGeeForceAtPosition(missileVessel.GetWorldPos3D()).normalized;
-			Vector3 planarDirectionToTarget = Vector3.ProjectOnPlane(targetPosition-missileVessel.transform.position, upDirection).normalized;
+			Vector3 planarVectorToTarget = Vector3.ProjectOnPlane(targetPosition - missileVessel.transform.position, upDirection);
+			Vector3 planarDirectionToTarget = planarVectorToTarget.normalized;
 			Vector3 crossAxis = Vector3.Cross(planarDirectionToTarget, upDirection).normalized;
-			float sinAmplitude = Mathf.Clamp(Vector3.Distance(targetPosition, missileVessel.transform.position)-650, 0, 4500);
-			Vector3 targetSin = (Mathf.Sin(1.5f*Time.time) * sinAmplitude * crossAxis)+targetPosition;
+			float sinAmplitude = Mathf.Clamp(Vector3.Distance(targetPosition, missileVessel.transform.position)-850, 0, 4500);
+			Vector3 sinOffset = (Mathf.Sin(1.25f * Time.time) * sinAmplitude * crossAxis);
+			Vector3 targetSin = targetPosition + sinOffset;
+			Vector3 planarSin = missileVessel.transform.position + planarVectorToTarget + sinOffset;
+
 			Vector3 finalTarget;
-			if(Vector3.Distance(targetPosition,missileVessel.transform.position) > (1000+GetRadarAltitude(missileVessel)))
+			if(Vector3.Distance(targetPosition,missileVessel.transform.position) > (2500+GetRadarAltitude(missileVessel)))
 			{
-				finalTarget = GetCruiseTarget(targetSin, missileVessel, radarAlt);
+				finalTarget = targetPosition;
 			}
 			else if(!GetBallisticGuidanceTarget(targetSin, missileVessel, true, out finalTarget))
 			{
-				finalTarget = GetAirToGroundTarget(targetSin, missileVessel, 6);
+				//finalTarget = GetAirToGroundTarget(targetSin, missileVessel, 6);
+				finalTarget = planarSin;
 			}
 			return finalTarget;
 		}
@@ -198,12 +255,11 @@ namespace BahaTurret
 			if(DefaultLiftCurve == null)
 			{
 				DefaultLiftCurve = new FloatCurve();
-				DefaultLiftCurve.Add(0, .1f);
-				DefaultLiftCurve.Add(8, .45f);
-				DefaultLiftCurve.Add(19, 1);
-				DefaultLiftCurve.Add(23, .9f);
-				DefaultLiftCurve.Add(29, 0.85f);
-				DefaultLiftCurve.Add(35, 0.65f);
+				DefaultLiftCurve.Add(0, 0);
+				DefaultLiftCurve.Add(8, .35f);
+			//	DefaultLiftCurve.Add(19, 1);
+			//	DefaultLiftCurve.Add(23, .9f);
+				DefaultLiftCurve.Add(30, 1.5f);
 				DefaultLiftCurve.Add(65, .6f);
 				DefaultLiftCurve.Add(90, .7f);
 			}
@@ -211,10 +267,10 @@ namespace BahaTurret
 			if(DefaultDragCurve == null)
 			{
 				DefaultDragCurve = new FloatCurve();
-				DefaultDragCurve.Add(0, 0.00225f);
-				DefaultDragCurve.Add(5, .0035f);
-				DefaultDragCurve.Add(15, .015f);
-				DefaultDragCurve.Add(29, .025f);
+				DefaultDragCurve.Add(0, 0.00215f);
+				DefaultDragCurve.Add(5, .00285f);
+				DefaultDragCurve.Add(15, .007f);
+				DefaultDragCurve.Add(29, .01f);
 				DefaultDragCurve.Add(55, .3f);
 				DefaultDragCurve.Add(90, .5f);
 			}
@@ -245,14 +301,14 @@ namespace BahaTurret
 			{
 				double liftForce = 0.5 * airDensity * Math.Pow(airSpeed, 2) * liftArea * liftMultiplier * liftCurve.Evaluate(AoA);
 				Vector3 forceDirection = Vector3.ProjectOnPlane(-velocity, ml.transform.forward).normalized;
-				rb.AddForceAtPosition((float)liftForce * forceDirection, ml.transform.TransformPoint(CoL));
+				rb.AddForceAtPosition((float)liftForce * forceDirection, ml.transform.TransformPoint(ml.part.CoMOffset+CoL));
 			}
 
 			//drag
 			if(airSpeed > 0)
 			{
 				double dragForce = 0.5 * airDensity * Math.Pow(airSpeed, 2) * liftArea * dragMultiplier * dragCurve.Evaluate(AoA);
-				rb.AddForceAtPosition((float)dragForce * -velocity.normalized, ml.transform.TransformPoint(CoL));
+				rb.AddForceAtPosition((float)dragForce * -velocity.normalized, ml.transform.TransformPoint(ml.part.CoMOffset+CoL));
 			}
 
 
@@ -276,7 +332,7 @@ namespace BahaTurret
 				torqueDirection = ml.transform.InverseTransformDirection(torqueDirection);
 
 				float torque = Mathf.Clamp(targetAngle * steerMult, 0, maxTorque);
-				Vector3 finalTorque = Vector3.ProjectOnPlane(Vector3.Lerp(previousTorque, torqueDirection*torque, 0.86f), Vector3.forward);
+				Vector3 finalTorque = Vector3.ProjectOnPlane(Vector3.Lerp(previousTorque, torqueDirection*torque, 1), Vector3.forward);
 				
 				rb.AddRelativeTorque(finalTorque);
 				
@@ -300,6 +356,13 @@ namespace BahaTurret
 		public static float GetRaycastRadarAltitude(Vector3 position)
 		{
 			Vector3 upDirection = -FlightGlobals.getGeeForceAtPosition(position).normalized;
+
+			float altAtPos = FlightGlobals.getAltitudeAtPos(position);
+			if(altAtPos < 0)
+			{
+				position += 2 * Mathf.Abs(altAtPos) * upDirection;
+			}
+
 			Ray ray = new Ray(position, -upDirection);
 			float rayDistance = FlightGlobals.getAltitudeAtPos(position);
 
@@ -318,6 +381,8 @@ namespace BahaTurret
 				return rayDistance;
 			}
 		}
+
+
 	}
 }
 

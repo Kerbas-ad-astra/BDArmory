@@ -21,6 +21,7 @@ namespace BahaTurret
 			audioSource = gameObject.AddComponent<AudioSource>();
 			audioSource.minDistance = 1;
 			audioSource.maxDistance = 50;
+			audioSource.spatialBlend = 1;
 			audioSource.volume = BDArmorySettings.BDARMORY_WEAPONS_VOLUME;
 			
 			int random = UnityEngine.Random.Range(1,3);
@@ -69,7 +70,14 @@ namespace BahaTurret
 			foreach(KSPParticleEmitter pe in newExplosion.GetComponentsInChildren<KSPParticleEmitter>())
 			{
 				pe.emit = true;	
-				pe.force = (4.49f * FlightGlobals.getGeeForceAtPosition(position));
+				if(pe.gameObject.name == "sparks")
+				{
+					pe.force = (4.49f * FlightGlobals.getGeeForceAtPosition(position));
+				}
+				else if(pe.gameObject.name == "smoke")
+				{
+					pe.force = (1.49f * FlightGlobals.getGeeForceAtPosition(position));
+				}
 			}
 		}
 		

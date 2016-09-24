@@ -33,7 +33,7 @@ namespace BahaTurret
 			//setup shader first
 			if(!radarShader)
 			{
-				radarShader = BDAShaderLoader.LoadManifestShader("BahaTurret.UnlitBlack.shader");
+				radarShader = BDAShaderLoader.UnlitBlackShader;//.LoadManifestShader("BahaTurret.UnlitBlack.shader");
 			}
 
 			//then setup textures
@@ -54,10 +54,7 @@ namespace BahaTurret
 
 		public static float GetRadarSnapshot(Vessel v, Vector3 origin, float camFoV)
 		{
-			if(v.Landed)
-			{
-				return 0;
-			}
+			
 			TargetInfo ti = v.GetComponent<TargetInfo>();
 			if(ti && ti.isMissile)
 			{
@@ -97,10 +94,8 @@ namespace BahaTurret
 		}
 
 
-		public static void ScanInDirection(MissileFire myWpnManager, float directionAngle, Transform referenceTransform, float fov, Vector3 position, float minSignature, ref TargetSignatureData[] dataArray, float dataPersistTime, bool pingRWR, RadarWarningReceiver.RWRThreatTypes rwrType, bool radarSnapshot)
+		public static void UpdateRadarLock(MissileFire myWpnManager, float directionAngle, Transform referenceTransform, float fov, Vector3 position, float minSignature, ref TargetSignatureData[] dataArray, float dataPersistTime, bool pingRWR, RadarWarningReceiver.RWRThreatTypes rwrType, bool radarSnapshot)
 		{
-	
-
 			Vector3d geoPos = VectorUtils.WorldPositionToGeoCoords(position, FlightGlobals.currentMainBody);
 			Vector3 forwardVector = referenceTransform.forward;
 			Vector3 upVector = referenceTransform.up;//VectorUtils.GetUpDirection(position);
@@ -167,14 +162,71 @@ namespace BahaTurret
 
 		}
 
-		public static void ScanInDirection(Ray ray, float fov, float minSignature, ref TargetSignatureData[] dataArray, float dataPersistTime, bool pingRWR, RadarWarningReceiver.RWRThreatTypes rwrType, bool radarSnapshot)
+		public static void UpdateRadarLock(MissileFire myWpnManager, float directionAngle, Transform referenceTransform, float fov, Vector3 position, float minSignature, ModuleRadar radar, bool pingRWR, RadarWarningReceiver.RWRThreatTypes rwrType, bool radarSnapshot)
+		{
+			Vector3d geoPos = VectorUtils.WorldPositionToGeoCoords(position, FlightGlobals.currentMainBody);
+			Vector3 forwardVector = referenceTransform.forward;
+			Vector3 upVector = referenceTransform.up;//VectorUtils.GetUpDirection(position);
+			Vector3 lookDirection = Quaternion.AngleAxis(directionAngle, upVector) * forwardVector;
+
+			foreach(var vessel in BDATargetManager.LoadedVessels)
+			{
+				if(vessel == null) continue;
+				if(!vessel.loaded) continue;
+
+				if(myWpnManager)
+				{
+					if(vessel == myWpnManager.vessel) continue; //ignore self
+				}
+				else if((vessel.transform.position - position).sqrMagnitude < 3600) continue;
+
+				Vector3 vesselDirection = Vector3.ProjectOnPlane(vessel.CoM - position, upVector);
+
+				if(Vector3.Angle(vesselDirection, lookDirection) < fov / 2)
+				{
+					if(TerrainCheck(referenceTransform.position, vessel.transform.position)) continue; //blocked by terrain
+
+					float sig = float.MaxValue;
+					if(radarSnapshot && minSignature > 0) sig = GetModifiedSignature(vessel, position);
+
+					RadarWarningReceiver.PingRWR(vessel, position, rwrType, radar.signalPersistTime);
+
+					float detectSig = sig;
+
+					VesselECMJInfo vesselJammer = vessel.GetComponent<VesselECMJInfo>();
+					if(vesselJammer)
+					{
+						sig *= vesselJammer.rcsReductionFactor;
+						detectSig += vesselJammer.jammerStrength;
+					}
+
+					if(detectSig > minSignature)
+					{
+						if(vessel.vesselType == VesselType.Debris)
+						{
+							vessel.gameObject.AddComponent<TargetInfo>();
+						}
+						else if(myWpnManager != null)
+						{
+							BDATargetManager.ReportVessel(vessel, myWpnManager);
+						}
+
+						//radar.vesselRadarData.AddRadarContact(radar, new TargetSignatureData(vessel, detectSig), false);
+						radar.ReceiveContactData(new TargetSignatureData(vessel, detectSig), false);
+					}
+				}
+			}
+
+		}
+
+		public static void UpdateRadarLock(Ray ray, float fov, float minSignature, ref TargetSignatureData[] dataArray, float dataPersistTime, bool pingRWR, RadarWarningReceiver.RWRThreatTypes rwrType, bool radarSnapshot)
 		{
 			int dataIndex = 0;
 			foreach(var vessel in BDATargetManager.LoadedVessels)
 			{
 				if(vessel == null) continue;
 				if(!vessel.loaded) continue;
-				if(vessel.Landed) continue;
+				//if(vessel.Landed) continue;
 
 				Vector3 vectorToTarget = vessel.transform.position - ray.origin;
 				if((vectorToTarget).sqrMagnitude < 10) continue; //ignore self
@@ -212,6 +264,70 @@ namespace BahaTurret
 			}
 		}
 
+		public static void UpdateRadarLock(Ray ray, Vector3 predictedPos, float fov, float minSignature, ModuleRadar radar, bool pingRWR, bool radarSnapshot, float dataPersistTime, bool locked, int lockIndex, Vessel lockedVessel)
+		{
+			RadarWarningReceiver.RWRThreatTypes rwrType = radar.rwrType;
+			//Vessel lockedVessel = null;
+			float closestSqrDist = 100;
+
+			if(lockedVessel == null)
+			{
+				foreach(var vessel in BDATargetManager.LoadedVessels)
+				{
+					if(vessel == null) continue;
+					if(!vessel.loaded) continue;
+					//if(vessel.Landed) continue;
+
+					Vector3 vectorToTarget = vessel.transform.position - ray.origin;
+					if((vectorToTarget).sqrMagnitude < 10) continue; //ignore self
+
+					if(Vector3.Dot(vectorToTarget, ray.direction) < 0) continue; //ignore behind ray
+
+					if(Vector3.Angle(vessel.CoM - ray.origin, ray.direction) < fov / 2)
+					{
+						float sqrDist = Vector3.SqrMagnitude(vessel.CoM - predictedPos);
+						if(sqrDist < closestSqrDist)
+						{
+							closestSqrDist = sqrDist;
+							lockedVessel = vessel;
+						}
+					}
+				}
+			}
+
+			if(lockedVessel != null)
+			{
+				if(TerrainCheck(ray.origin, lockedVessel.transform.position))
+				{
+					radar.UnlockTargetAt(lockIndex, true); //blocked by terrain
+					return;
+				}
+
+				float sig = float.MaxValue;
+				if(radarSnapshot) sig = GetModifiedSignature(lockedVessel, ray.origin);
+
+				if(pingRWR && sig > minSignature * 0.66f)
+				{
+					RadarWarningReceiver.PingRWR(lockedVessel, ray.origin, rwrType, dataPersistTime);
+				}
+
+				if(sig > minSignature)
+				{
+					//radar.vesselRadarData.AddRadarContact(radar, new TargetSignatureData(lockedVessel, sig), locked);
+					radar.ReceiveContactData(new TargetSignatureData(lockedVessel, sig), locked);
+				}
+				else
+				{
+					radar.UnlockTargetAt(lockIndex, true);
+					return;
+				}
+			}
+			else
+			{
+				radar.UnlockTargetAt(lockIndex, true);
+			}
+		}
+
 		/// <summary>
 		/// Scans for targets in direction with field of view.
 		/// Returns the direction scanned for debug 
@@ -225,11 +341,16 @@ namespace BahaTurret
 		/// <param name="maxDistance">Max distance.</param>
 		public static Vector3 GuardScanInDirection(MissileFire myWpnManager, float directionAngle, Transform referenceTransform, float fov, out ViewScanResults results, float maxDistance)
 		{
+			fov *= 1.1f;
 			results = new ViewScanResults();
 			results.foundMissile = false;
 			results.foundHeatMissile = false;
+			results.foundRadarMissile = false;
 			results.foundAGM = false;
 			results.firingAtMe = false;
+			results.missileThreatDistance = float.MaxValue;
+            results.threatVessel = null;
+            results.threatWeaponManager = null;
 
 			if(!myWpnManager || !referenceTransform)
 			{
@@ -276,17 +397,29 @@ namespace BahaTurret
 								if(missile = tInfo.missileModule)
 								{
 									results.foundMissile = true;
-									if(missile.hasFired && (missile.targetPosition - (myWpnManager.vessel.CoM + (myWpnManager.vessel.rb_velocity * Time.fixedDeltaTime))).sqrMagnitude < 3600)
+									results.threatVessel = missile.vessel;
+									Vector3 vectorFromMissile = myWpnManager.vessel.CoM - missile.part.transform.position;
+									Vector3 relV = missile.vessel.srf_velocity - myWpnManager.vessel.srf_velocity;
+									bool approaching = Vector3.Dot(relV, vectorFromMissile) > 0;
+									if(missile.hasFired && missile.timeIndex > 1 && approaching && (missile.targetPosition - (myWpnManager.vessel.CoM + (myWpnManager.vessel.rb_velocity * Time.fixedDeltaTime))).sqrMagnitude < 3600)
 									{
-										//Debug.Log("found missile targeting me");
 										if(missile.targetingMode == MissileLauncher.TargetingModes.Heat)
 										{
 											results.foundHeatMissile = true;
+											results.missileThreatDistance = Mathf.Min(results.missileThreatDistance, Vector3.Distance(missile.part.transform.position, myWpnManager.part.transform.position));
+											results.threatPosition = missile.transform.position;
 											break;
+										}
+										else if(missile.targetingMode == MissileLauncher.TargetingModes.Radar)
+										{
+											results.foundRadarMissile = true;
+											results.missileThreatDistance = Mathf.Min(results.missileThreatDistance, Vector3.Distance(missile.part.transform.position, myWpnManager.part.transform.position));
+											results.threatPosition = missile.transform.position;
 										}
 										else if(missile.targetingMode == MissileLauncher.TargetingModes.Laser)
 										{
 											results.foundAGM = true;
+											results.missileThreatDistance = Mathf.Min(results.missileThreatDistance, Vector3.Distance(missile.part.transform.position, myWpnManager.part.transform.position));
 											break;
 										}
 									}
@@ -299,19 +432,23 @@ namespace BahaTurret
 							else
 							{
 								//check if its shooting guns at me
-								if(!results.firingAtMe)
-								{
+								//if(!results.firingAtMe)       //more work, but we can't afford to be incorrect picking the closest threat
+								//{
 									foreach(var weapon in vessel.FindPartModulesImplementing<ModuleWeapon>())
 									{
-										if(!weapon.isFiring) continue;
+										if(!weapon.recentlyFiring) continue;
 										if(Vector3.Dot(weapon.fireTransforms[0].forward, vesselDirection) > 0) continue;
 
-										if(Vector3.Angle(weapon.fireTransforms[0].forward, -vesselDirection) < 6500 / vesselDistance)
+										if(Vector3.Angle(weapon.fireTransforms[0].forward, -vesselDirection) < 6500 / vesselDistance && (!results.firingAtMe || (weapon.vessel.ReferenceTransform.position - position).magnitude < (results.threatPosition - position).magnitude))
 										{
 											results.firingAtMe = true;
+											results.threatPosition = weapon.vessel.transform.position;
+                                            results.threatVessel = weapon.vessel;
+                                            results.threatWeaponManager = weapon.weaponManager;
+                                            break;
 										}
 									}
-								}
+								//}
 							}
 						}
 					}
@@ -332,11 +469,11 @@ namespace BahaTurret
 			
 			if(vessel.Landed)
 			{
-				sig /= 550;
+				sig *= 0.25f;
 			}
 			if(vessel.Splashed)
 			{
-				sig /= 250;
+				sig *= 0.4f;
 			}
 			
 			//notching and ground clutter
@@ -345,7 +482,16 @@ namespace BahaTurret
 			float notchFactor = 1;
 			float angleFromUp = Vector3.Angle(targetDirection,upVector);
 			float lookDownAngle = angleFromUp-90;
-			if(lookDownAngle > 5) notchFactor = Mathf.Clamp(targetClosureV.sqrMagnitude/Mathf.Pow(60,2), 0.1f, 1f);
+
+			if(lookDownAngle > 5)
+			{
+				notchFactor = Mathf.Clamp(targetClosureV.sqrMagnitude / 3600f, 0.1f, 1f);
+			}
+			else
+			{
+				notchFactor = Mathf.Clamp(targetClosureV.sqrMagnitude / 3600f, 0.8f, 3f);
+			}
+
 			float groundClutterFactor = Mathf.Clamp((90/angleFromUp), 0.25f, 1.85f);
 			sig *= groundClutterFactor;
 			sig *= notchFactor;
